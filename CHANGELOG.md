@@ -6,8 +6,11 @@
 
 - Code reorganisation, a lot of code has moved, please review the following PRs accordingly [#1444](https://github.com/juanfont/headscale/pull/1444)
 
+## 0.22.3-rr (2023-XX-XX)
+
 ### Changes
 - Set max open and idle connections for postgres
+- Allows conflicting subnet ranges across users
 
 ## 0.22.3 (2023-05-12)
 
