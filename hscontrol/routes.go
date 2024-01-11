@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"net/netip"
 
-	v1 "github.com/juanfont/headscale/gen/go/headscale/v1"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gorm.io/gorm"
+
+	v1 "github.com/juanfont/headscale/gen/go/headscale/v1"
 )
 
 const (
@@ -211,7 +212,7 @@ func (h *Headscale) isUniquePrefix(route Route) bool {
 	for _, r := range routes {
 		// Return false, if there are more than one uniquePrefix for the same
 		// user. Else, true. This allows having the same prefix for two users.
-		if route.Machine.UserID == r.Machine.UserID && route.Machine.isOnline() {
+		if route.Machine.UserID == r.Machine.UserID && r.Machine.isOnline() {
 			return false
 		}
 	}
@@ -367,7 +368,7 @@ func (h *Headscale) handlePrimarySubnetFailover() error {
 
 			var newPrimaryRoute *Route
 			for pos, r := range newPrimaryRoutes {
-				if r.Machine.isOnline() {
+				if r.Machine.UserID == route.Machine.UserID && r.Machine.isOnline() {
 					newPrimaryRoute = &newPrimaryRoutes[pos]
 
 					break
