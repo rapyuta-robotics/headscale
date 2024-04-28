@@ -204,6 +204,10 @@ func filterMachinesByACL(
 		if peer.ID == machine.ID {
 			continue
 		}
+		//Skip machines not belonging to this user
+		if peer.User.Name != machine.User.Name {
+			continue
+		}
 
 		if machine.canAccess(filter, &machines[index]) || peer.canAccess(filter, machine) {
 			result = append(result, peer)
@@ -414,7 +418,7 @@ func (h *Headscale) SetTags(machine *Machine, tags []string) error {
 	if err := h.UpdateACLRules(); err != nil && !errors.Is(err, errEmptyPolicy) {
 		return err
 	}
-	h.setLastStateChangeToNow()
+	h.setLastStateChangeToNow(machine.User)
 
 	if err := h.db.Save(machine).Error; err != nil {
 		return fmt.Errorf("failed to update tags for machine in the database: %w", err)
@@ -428,7 +432,7 @@ func (h *Headscale) ExpireMachine(machine *Machine) error {
 	now := time.Now()
 	machine.Expiry = &now
 
-	h.setLastStateChangeToNow()
+	h.setLastStateChangeToNow(machine.User)
 
 	if err := h.db.Save(machine).Error; err != nil {
 		return fmt.Errorf("failed to expire machine in the database: %w", err)
@@ -455,7 +459,7 @@ func (h *Headscale) RenameMachine(machine *Machine, newName string) error {
 	}
 	machine.GivenName = newName
 
-	h.setLastStateChangeToNow()
+	h.setLastStateChangeToNow(machine.User)
 
 	if err := h.db.Save(machine).Error; err != nil {
 		return fmt.Errorf("failed to rename machine in the database: %w", err)
@@ -471,7 +475,7 @@ func (h *Headscale) RefreshMachine(machine *Machine, expiry time.Time) error {
 	machine.LastSuccessfulUpdate = &now
 	machine.Expiry = &expiry
 
-	h.setLastStateChangeToNow()
+	h.setLastStateChangeToNow(machine.User)
 
 	if err := h.db.Save(machine).Error; err != nil {
 		return fmt.Errorf(
@@ -536,7 +540,7 @@ func (h *Headscale) isOutdated(machine *Machine) bool {
 	// TODO(kradalby): Only request updates from users where we can talk to nodes
 	// This would mostly be for a bit of performance, and can be calculated based on
 	// ACLs.
-	lastChange := h.getLastStateChange()
+	lastChange := h.getLastStateChange(machine.User)
 	lastUpdate := machine.CreatedAt
 	if machine.LastSuccessfulUpdate != nil {
 		lastUpdate = *machine.LastSuccessfulUpdate
@@ -1068,7 +1072,7 @@ func (h *Headscale) enableRoutes(machine *Machine, routeStrs ...string) error {
 		}
 	}
 
-	h.setLastStateChangeToNow()
+	h.setLastStateChangeToNow(machine.User)
 
 	return nil
 }
