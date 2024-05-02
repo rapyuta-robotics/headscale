@@ -313,7 +313,7 @@ func (h *Headscale) handlePrimarySubnetFailover() error {
 		log.Error().Err(err).Msg("error getting routes")
 	}
 
-	routesChanged := false
+	usersChanged := make(map[string]User, 0)
 	for pos, route := range routes {
 		if route.isExitRoute() {
 			continue
@@ -333,9 +333,7 @@ func (h *Headscale) handlePrimarySubnetFailover() error {
 
 					return err
 				}
-
-				routesChanged = true
-
+				usersChanged[route.Machine.User.Name] = route.Machine.User
 				continue
 			}
 		}
@@ -408,12 +406,11 @@ func (h *Headscale) handlePrimarySubnetFailover() error {
 				return err
 			}
 
-			routesChanged = true
+			usersChanged[route.Machine.User.Name] = route.Machine.User
 		}
 	}
-
-	if routesChanged {
-		h.setLastStateChangeToNow()
+	for _, user := range usersChanged {
+		h.setLastStateChangeToNow(user)
 	}
 
 	return nil

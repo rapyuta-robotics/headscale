@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	_ "net/http/pprof" //nolint
 	"os"
 	"os/signal"
 	"sort"
@@ -245,7 +246,7 @@ func (h *Headscale) expireEphemeralNodesWorker() {
 
 		return
 	}
-
+	usersChanged := make(map[string]User, 0)
 	for _, user := range users {
 		machines, err := h.ListMachinesByUser(user.Name)
 		if err != nil {
@@ -257,12 +258,11 @@ func (h *Headscale) expireEphemeralNodesWorker() {
 			return
 		}
 
-		expiredFound := false
 		for _, machine := range machines {
 			if machine.isEphemeral() && machine.LastSeen != nil &&
 				time.Now().
 					After(machine.LastSeen.Add(h.cfg.EphemeralNodeInactivityTimeout)) {
-				expiredFound = true
+				usersChanged[user.Name] = user
 				log.Info().
 					Str("machine", machine.Hostname).
 					Msg("Ephemeral client removed from database")
@@ -276,10 +276,9 @@ func (h *Headscale) expireEphemeralNodesWorker() {
 				}
 			}
 		}
-
-		if expiredFound {
-			h.setLastStateChangeToNow()
-		}
+	}
+	for _, user := range usersChanged {
+		h.setLastStateChangeToNow(user)
 	}
 }
 
@@ -290,7 +289,7 @@ func (h *Headscale) expireExpiredMachinesWorker() {
 
 		return
 	}
-
+	usersChanged := make(map[string]User, 0)
 	for _, user := range users {
 		machines, err := h.ListMachinesByUser(user.Name)
 		if err != nil {
@@ -302,12 +301,10 @@ func (h *Headscale) expireExpiredMachinesWorker() {
 			return
 		}
 
-		expiredFound := false
 		for index, machine := range machines {
 			if machine.isExpired() &&
 				machine.Expiry.After(h.getLastStateChange(user)) {
-				expiredFound = true
-
+				usersChanged[user.Name] = user
 				err := h.ExpireMachine(&machines[index])
 				if err != nil {
 					log.Error().
@@ -323,10 +320,9 @@ func (h *Headscale) expireExpiredMachinesWorker() {
 				}
 			}
 		}
-
-		if expiredFound {
-			h.setLastStateChangeToNow()
-		}
+	}
+	for _, user := range usersChanged {
+		h.setLastStateChangeToNow(user)
 	}
 }
 
@@ -717,6 +713,7 @@ func (h *Headscale) Serve() error {
 		Msgf("listening and serving HTTP on: %s", h.cfg.Addr)
 
 	promMux := http.NewServeMux()
+	promMux.Handle("/debug/pprof/", http.DefaultServeMux)
 	promMux.Handle("/metrics", promhttp.Handler())
 
 	promHTTPServer := &http.Server{
@@ -905,24 +902,31 @@ func (h *Headscale) getTLSSettings() (*tls.Config, error) {
 	}
 }
 
-func (h *Headscale) setLastStateChangeToNow() {
-	var err error
+func (h *Headscale) setLastStateChangeToNow(filteredUsers ...User) {
+	var (
+		err   error
+		users []User
+	)
+	if len(filteredUsers) > 0 {
+		users = filteredUsers
+	} else {
+		users, err = h.ListUsers()
+		if err != nil {
+			log.Error().
+				Caller().
+				Err(err).
+				Msg("failed to fetch all users, failing to update last changed state.")
+		}
+	}
 
 	now := time.Now().UTC()
-
-	users, err := h.ListUsers()
-	if err != nil {
-		log.Error().
-			Caller().
-			Err(err).
-			Msg("failed to fetch all users, failing to update last changed state.")
-	}
 
 	for _, user := range users {
 		lastStateUpdate.WithLabelValues(user.Name, "headscale").Set(float64(now.Unix()))
 		if h.lastStateChange == nil {
 			h.lastStateChange = xsync.NewMapOf[time.Time]()
 		}
+
 		h.lastStateChange.Store(user.Name, now)
 	}
 }
