@@ -1236,7 +1236,7 @@ func (s *Suite) TestAutoApproveRoutes(c *check.C) {
 }
 	`)
 
-	err := app.LoadACLPolicyFromBytes(acl, "hujson")
+	err := app.LoadACLPolicyFromBytes(acl)
 	c.Assert(err, check.IsNil)
 
 	user, err := app.CreateUser("test")

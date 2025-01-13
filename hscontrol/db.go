@@ -218,6 +218,11 @@ func (h *Headscale) initDB() error {
 		return err
 	}
 
+	err = db.AutoMigrate(&Policy{})
+	if err != nil {
+		return err
+	}
+
 	err = h.setValue("db_version", dbVersion)
 
 	return err

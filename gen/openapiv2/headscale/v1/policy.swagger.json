@@ -1,7 +1,7 @@
 {
   "swagger": "2.0",
   "info": {
-    "title": "headscale/v1/user.proto",
+    "title": "headscale/v1/policy.proto",
     "version": "version not set"
   },
   "consumes": [

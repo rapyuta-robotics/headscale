@@ -528,7 +528,9 @@ func (h *Headscale) createRouter(grpcMux *runtime.ServeMux) *mux.Router {
 // Serve launches a GIN server with the Headscale API.
 func (h *Headscale) Serve() error {
 	var err error
-
+	if err = h.loadACLPolicy(); err != nil {
+		return fmt.Errorf("failed to load ACL policy: %w", err)
+	}
 	// Fetch an initial DERP Map before we start serving
 	h.DERPMap = GetDERPMap(h.cfg.DERP)
 
@@ -755,17 +757,12 @@ func (h *Headscale) Serve() error {
 					Msg("Received SIGHUP, reloading ACL and Config")
 
 				// TODO(kradalby): Reload config on SIGHUP
-
-				if h.cfg.ACL.PolicyPath != "" {
-					aclPath := AbsolutePathFromConfigPath(h.cfg.ACL.PolicyPath)
-					err := h.LoadACLPolicyFromPath(aclPath)
-					if err != nil {
-						log.Error().Err(err).Msg("Failed to reload ACL policy")
-					}
+				if err := h.loadACLPolicy(); err != nil {
+					log.Error().Err(err).Msg("failed to reload ACL policy")
+				}
+				if h.aclPolicy != nil {
 					log.Info().
-						Str("path", aclPath).
 						Msg("ACL policy successfully reloaded, notifying nodes of change")
-
 					h.setLastStateChangeToNow()
 				}
 
@@ -1020,4 +1017,44 @@ func readOrCreatePrivateKey(path string) (*key.MachinePrivate, error) {
 	}
 
 	return &machineKey, nil
+}
+
+func (h *Headscale) loadACLPolicy() error {
+	var (
+		err error
+	)
+	switch h.cfg.Policy.Mode {
+	case PolicyModeFile:
+		path := h.cfg.Policy.Path
+
+		// It is fine to start headscale without a policy file.
+		if len(path) == 0 {
+			return nil
+		}
+
+		absPath := AbsolutePathFromConfigPath(path)
+		err = h.LoadACLPolicyFromPath(absPath)
+		if err != nil {
+			return fmt.Errorf("failed to load ACL policy from file: %w", err)
+		}
+	case PolicyModeDB:
+		p, err := h.GetACLPolicy()
+		if err != nil {
+			if errors.Is(err, ErrPolicyNotFound) {
+				return nil
+			}
+
+			return fmt.Errorf("failed to get policy from database: %w", err)
+		}
+
+		err = h.LoadACLPolicyFromBytes([]byte(p.Data))
+		if err != nil {
+			return fmt.Errorf("failed to parse policy: %w", err)
+		}
+	default:
+		log.Fatal().
+			Str("mode", string(h.cfg.Policy.Mode)).
+			Msg("Unknown ACL policy mode")
+	}
+	return nil
 }
