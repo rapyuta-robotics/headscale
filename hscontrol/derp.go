@@ -83,25 +83,6 @@ func mergeDERPMaps(derpMaps []*tailcfg.DERPMap) *tailcfg.DERPMap {
 func GetDERPMap(cfg DERPConfig) *tailcfg.DERPMap {
 	derpMaps := make([]*tailcfg.DERPMap, 0)
 
-	for _, path := range cfg.Paths {
-		log.Debug().
-			Str("func", "GetDERPMap").
-			Str("path", path).
-			Msg("Loading DERPMap from path")
-		derpMap, err := loadDERPMapFromPath(path)
-		if err != nil {
-			log.Error().
-				Str("func", "GetDERPMap").
-				Str("path", path).
-				Err(err).
-				Msg("Could not load DERP map from path")
-
-			break
-		}
-
-		derpMaps = append(derpMaps, derpMap)
-	}
-
 	for _, addr := range cfg.URLs {
 		derpMap, err := loadDERPMapFromURL(addr)
 		log.Debug().
@@ -112,6 +93,25 @@ func GetDERPMap(cfg DERPConfig) *tailcfg.DERPMap {
 			log.Error().
 				Str("func", "GetDERPMap").
 				Str("url", addr.String()).
+				Err(err).
+				Msg("Could not load DERP map from path")
+
+			break
+		}
+
+		derpMaps = append(derpMaps, derpMap)
+	}
+
+	for _, path := range cfg.Paths {
+		log.Debug().
+			Str("func", "GetDERPMap").
+			Str("path", path).
+			Msg("Loading DERPMap from path")
+		derpMap, err := loadDERPMapFromPath(path)
+		if err != nil {
+			log.Error().
+				Str("func", "GetDERPMap").
+				Str("path", path).
 				Err(err).
 				Msg("Could not load DERP map from path")
 

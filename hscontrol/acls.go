@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/netip"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -15,7 +14,6 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/tailscale/hujson"
 	"go4.org/netipx"
-	"gopkg.in/yaml.v3"
 	"tailscale.com/envknob"
 	"tailscale.com/tailcfg"
 )
@@ -82,42 +80,36 @@ func (h *Headscale) LoadACLPolicyFromPath(path string) error {
 		Bytes("file", policyBytes).
 		Msg("Loading ACLs")
 
-	switch filepath.Ext(path) {
-	case ".yml", ".yaml":
-		return h.LoadACLPolicyFromBytes(policyBytes, "yaml")
-	}
-
-	return h.LoadACLPolicyFromBytes(policyBytes, "hujson")
+	return h.LoadACLPolicyFromBytes(policyBytes)
 }
 
-func (h *Headscale) LoadACLPolicyFromBytes(acl []byte, format string) error {
+func (h *Headscale) ValidatePolicyFromBytes(acl []byte) (*ACLPolicy, error) {
 	var policy ACLPolicy
-	switch format {
-	case "yaml":
-		err := yaml.Unmarshal(acl, &policy)
-		if err != nil {
-			return err
-		}
+	ast, err := hujson.Parse(acl)
+	if err != nil {
+		return nil, err
+	}
 
-	default:
-		ast, err := hujson.Parse(acl)
-		if err != nil {
-			return err
-		}
-
-		ast.Standardize()
-		acl = ast.Pack()
-		err = json.Unmarshal(acl, &policy)
-		if err != nil {
-			return err
-		}
+	ast.Standardize()
+	acl = ast.Pack()
+	err = json.Unmarshal(acl, &policy)
+	if err != nil {
+		return nil, err
 	}
 
 	if policy.IsZero() {
-		return errEmptyPolicy
+		return nil, errEmptyPolicy
+	}
+	return &policy, nil
+}
+
+func (h *Headscale) LoadACLPolicyFromBytes(acl []byte) error {
+	policy, err := h.ValidatePolicyFromBytes(acl)
+	if err != nil {
+		return err
 	}
 
-	h.aclPolicy = &policy
+	h.aclPolicy = policy
 
 	return h.UpdateACLRules()
 }

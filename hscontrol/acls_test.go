@@ -23,7 +23,7 @@ func (s *Suite) TestBrokenHuJson(c *check.C) {
 	acl := []byte(`
 {
 	`)
-	err := app.LoadACLPolicyFromBytes(acl, "hujson")
+	err := app.LoadACLPolicyFromBytes(acl)
 	c.Assert(err, check.NotNil)
 }
 
@@ -34,7 +34,7 @@ func (s *Suite) TestInvalidPolicyHuson(c *check.C) {
     "but_a_policy_though": false
 }
 	`)
-	err := app.LoadACLPolicyFromBytes(acl, "hujson")
+	err := app.LoadACLPolicyFromBytes(acl)
 	c.Assert(err, check.NotNil)
 	c.Assert(err, check.Equals, errEmptyPolicy)
 }
@@ -185,7 +185,7 @@ func (s *Suite) TestRuleInvalidGeneration(c *check.C) {
     ],
 }
 	`)
-	err := app.LoadACLPolicyFromBytes(acl, "hujson")
+	err := app.LoadACLPolicyFromBytes(acl)
 	c.Assert(err, check.NotNil)
 }
 
@@ -212,7 +212,7 @@ func (s *Suite) TestBasicRule(c *check.C) {
     ],
 }
 	`)
-	err := app.LoadACLPolicyFromBytes(acl, "hujson")
+	err := app.LoadACLPolicyFromBytes(acl)
 	c.Assert(err, check.IsNil)
 
 	rules, err := app.aclPolicy.generateFilterRules([]Machine{}, false)
@@ -589,7 +589,7 @@ func (s *Suite) TestPortRange(c *check.C) {
     ],
 }
 	`)
-	err := app.LoadACLPolicyFromBytes(acl, "hujson")
+	err := app.LoadACLPolicyFromBytes(acl)
 	c.Assert(err, check.IsNil)
 
 	rules, err := app.aclPolicy.generateFilterRules([]Machine{}, false)
@@ -644,7 +644,7 @@ func (s *Suite) TestProtocolParsing(c *check.C) {
     ],
 }
 	`)
-	err := app.LoadACLPolicyFromBytes(acl, "hujson")
+	err := app.LoadACLPolicyFromBytes(acl)
 	c.Assert(err, check.IsNil)
 
 	rules, err := app.aclPolicy.generateFilterRules([]Machine{}, false)
@@ -678,35 +678,7 @@ func (s *Suite) TestPortWildcard(c *check.C) {
     ],
 }
 	`)
-	err := app.LoadACLPolicyFromBytes(acl, "hujson")
-	c.Assert(err, check.IsNil)
-
-	rules, err := app.aclPolicy.generateFilterRules([]Machine{}, false)
-	c.Assert(err, check.IsNil)
-	c.Assert(rules, check.NotNil)
-
-	c.Assert(rules, check.HasLen, 1)
-	c.Assert(rules[0].DstPorts, check.HasLen, 1)
-	c.Assert(rules[0].DstPorts[0].Ports.First, check.Equals, uint16(0))
-	c.Assert(rules[0].DstPorts[0].Ports.Last, check.Equals, uint16(65535))
-	c.Assert(rules[0].SrcIPs, check.HasLen, 2)
-	c.Assert(rules[0].SrcIPs[0], check.Equals, "0.0.0.0/0")
-}
-
-func (s *Suite) TestPortWildcardYAML(c *check.C) {
-	acl := []byte(`
----
-hosts:
-  host-1: 100.100.100.100/32
-  subnet-1: 100.100.101.100/24
-acls:
-  - action: accept
-    src:
-      - "*"
-    dst:
-      - host-1:*
-`)
-	err := app.LoadACLPolicyFromBytes(acl, "yaml")
+	err := app.LoadACLPolicyFromBytes(acl)
 	c.Assert(err, check.IsNil)
 
 	rules, err := app.aclPolicy.generateFilterRules([]Machine{}, false)
@@ -764,7 +736,7 @@ func (s *Suite) TestPortUser(c *check.C) {
     ],
 }
 	`)
-	err = app.LoadACLPolicyFromBytes(acl, "hujson")
+	err = app.LoadACLPolicyFromBytes(acl)
 	c.Assert(err, check.IsNil)
 
 	machines, err := app.ListMachines()
@@ -833,7 +805,7 @@ func (s *Suite) TestPortGroup(c *check.C) {
     ],
 }
 	`)
-	err = app.LoadACLPolicyFromBytes(acl, "hujson")
+	err = app.LoadACLPolicyFromBytes(acl)
 	c.Assert(err, check.IsNil)
 
 	machines, err := app.ListMachines()

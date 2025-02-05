@@ -4,6 +4,9 @@ package hscontrol
 import (
 	"context"
 	"fmt"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -548,6 +551,82 @@ func (api headscaleV1APIServer) DebugCreateMachine(
 	)
 
 	return &v1.DebugCreateMachineResponse{Machine: newMachine.toProto()}, nil
+}
+
+func (api headscaleV1APIServer) GetPolicy(
+	_ context.Context,
+	_ *v1.GetPolicyRequest,
+) (*v1.GetPolicyResponse, error) {
+	switch api.h.cfg.Policy.Mode {
+	case PolicyModeDB:
+		p, err := api.h.GetACLPolicy()
+		if err != nil {
+			return nil, err
+		}
+
+		return &v1.GetPolicyResponse{
+			Policy:    p.Data,
+			Version:   uint32(p.Version),
+			UpdatedAt: timestamppb.New(p.UpdatedAt),
+		}, nil
+	case PolicyModeFile:
+		// Read the file and return the contents as-is.
+		f, err := os.Open(api.h.cfg.Policy.Path)
+		if err != nil {
+			return nil, err
+		}
+
+		defer f.Close()
+
+		b, err := io.ReadAll(f)
+		if err != nil {
+			return nil, err
+		}
+
+		return &v1.GetPolicyResponse{Policy: string(b)}, nil
+	}
+
+	return nil, nil
+}
+
+func (api headscaleV1APIServer) SetPolicy(
+	_ context.Context,
+	request *v1.SetPolicyRequest,
+) (*v1.SetPolicyResponse, error) {
+	if api.h.cfg.Policy.Mode != PolicyModeDB {
+		return nil, ErrPolicyUpdateIsDisabled
+	}
+
+	p := request.GetPolicy()
+
+	_, err := api.h.ValidatePolicyFromBytes([]byte(p))
+	if err != nil {
+		return nil, err
+	}
+
+	updated, err := api.h.SetACLPolicy(uint(request.GetVersion()), p)
+	if err != nil {
+		return nil, err
+	}
+
+	err = api.h.LoadACLPolicyFromBytes([]byte(p))
+	if err != nil {
+		return nil, err
+	}
+
+	if api.h.aclPolicy != nil {
+		log.Info().
+			Msg("ACL policy successfully reloaded, notifying nodes of change")
+		api.h.setLastStateChangeToNow()
+	}
+
+	response := &v1.SetPolicyResponse{
+		Policy:    updated.Data,
+		Version:   uint32(updated.Version),
+		UpdatedAt: timestamppb.New(updated.UpdatedAt),
+	}
+
+	return response, nil
 }
 
 func (api headscaleV1APIServer) mustEmbedUnimplementedHeadscaleServiceServer() {}

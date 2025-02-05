@@ -443,6 +443,59 @@
         ]
       }
     },
+    "/api/v1/policy": {
+      "get": {
+        "summary": "--- Policy start ---",
+        "operationId": "HeadscaleService_GetPolicy",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetPolicyResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "HeadscaleService"
+        ]
+      },
+      "put": {
+        "operationId": "HeadscaleService_SetPolicy",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1SetPolicyResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1SetPolicyRequest"
+            }
+          }
+        ],
+        "tags": [
+          "HeadscaleService"
+        ]
+      }
+    },
     "/api/v1/preauthkey": {
       "get": {
         "operationId": "HeadscaleService_ListPreAuthKeys",
@@ -823,6 +876,7 @@
         "details": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/protobufAny"
           }
         }
@@ -1007,8 +1061,25 @@
         "routes": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/v1Route"
           }
+        }
+      }
+    },
+    "v1GetPolicyResponse": {
+      "type": "object",
+      "properties": {
+        "policy": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
         }
       }
     },
@@ -1018,6 +1089,7 @@
         "routes": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/v1Route"
           }
         }
@@ -1037,6 +1109,7 @@
         "apiKeys": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/v1ApiKey"
           }
         }
@@ -1048,6 +1121,7 @@
         "machines": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/v1Machine"
           }
         }
@@ -1059,6 +1133,7 @@
         "preAuthKeys": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/v1PreAuthKey"
           }
         }
@@ -1070,6 +1145,7 @@
         "users": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/v1User"
           }
         }
@@ -1261,6 +1337,34 @@
           "format": "date-time"
         },
         "deletedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "v1SetPolicyRequest": {
+      "type": "object",
+      "properties": {
+        "policy": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "format": "int64"
+        }
+      }
+    },
+    "v1SetPolicyResponse": {
+      "type": "object",
+      "properties": {
+        "policy": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "updatedAt": {
           "type": "string",
           "format": "date-time"
         }

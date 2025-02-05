@@ -9,6 +9,7 @@ import "headscale/v1/preauthkey.proto";
 import "headscale/v1/machine.proto";
 import "headscale/v1/routes.proto";
 import "headscale/v1/apikey.proto";
+import "headscale/v1/policy.proto";
 // import "headscale/v1/device.proto";
 
 service HeadscaleService {
@@ -178,6 +179,20 @@ service HeadscaleService {
             get : "/api/v1/apikey"
         };
     }
+    // --- Policy start ---
+    rpc GetPolicy(GetPolicyRequest) returns (GetPolicyResponse) {
+        option (google.api.http) = {
+            get: "/api/v1/policy"
+        };
+    }
+
+    rpc SetPolicy(SetPolicyRequest) returns (SetPolicyResponse) {
+        option (google.api.http) = {
+            put: "/api/v1/policy"
+            body: "*"
+        };
+    }
+    // --- Policy end ---
     // --- ApiKeys end ---
 
     // Implement Tailscale API
