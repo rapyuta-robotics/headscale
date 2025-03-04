@@ -86,9 +86,10 @@ type Headscale struct {
 	DERPMap    *tailcfg.DERPMap
 	DERPServer *DERPServer
 
-	aclPolicy *ACLPolicy
-	aclRules  []tailcfg.FilterRule
-	sshPolicy *tailcfg.SSHPolicy
+	aclPolicy          *ACLPolicy
+	aclRules           []tailcfg.FilterRule
+	sshPolicy          *tailcfg.SSHPolicy
+	prefetchedMachines []Machine
 
 	lastStateChange *xsync.MapOf[string, time.Time]
 
@@ -97,7 +98,8 @@ type Headscale struct {
 
 	registrationCache *cache.Cache
 
-	ipAllocationMutex sync.Mutex
+	ipAllocationMutex    sync.Mutex
+	prefetchMachineMutex sync.Mutex
 
 	shutdownChan       chan struct{}
 	pollNetMapStreamWG sync.WaitGroup
@@ -528,6 +530,10 @@ func (h *Headscale) createRouter(grpcMux *runtime.ServeMux) *mux.Router {
 // Serve launches a GIN server with the Headscale API.
 func (h *Headscale) Serve() error {
 	var err error
+	if err = h.LoadPrefetchMachinesFromDB(); err != nil {
+		return fmt.Errorf("failed to load machines from db : %w", err)
+	}
+
 	if err = h.loadACLPolicy(); err != nil {
 		return fmt.Errorf("failed to load ACL policy: %w", err)
 	}

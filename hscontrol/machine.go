@@ -248,13 +248,7 @@ func (h *Headscale) getPeers(machine *Machine) (Machines, error) {
 	// If ACLs rules are defined, filter visible host list with the ACLs
 	// else use the classic user scope
 	if h.aclPolicy != nil {
-		var machines []Machine
-		machines, err = h.ListMachines()
-		if err != nil {
-			log.Error().Err(err).Msg("Error retrieving list of machines")
-
-			return Machines{}, err
-		}
+		machines := h.GetPrefetchedMachines()
 		peers = h.filterMachinesByACL(machine, machines)
 	} else {
 		peers, err = h.ListPeers(machine)
@@ -424,6 +418,10 @@ func (h *Headscale) SetTags(machine *Machine, tags []string) error {
 		return fmt.Errorf("failed to update tags for machine in the database: %w", err)
 	}
 
+	if err := h.LoadPrefetchMachinesFromDB(); err != nil {
+		return fmt.Errorf("failed to load machines from database: %w", err)
+	}
+
 	return nil
 }
 
@@ -436,6 +434,10 @@ func (h *Headscale) ExpireMachine(machine *Machine) error {
 
 	if err := h.db.Save(machine).Error; err != nil {
 		return fmt.Errorf("failed to expire machine in the database: %w", err)
+	}
+
+	if err := h.LoadPrefetchMachinesFromDB(); err != nil {
+		return fmt.Errorf("failed to load machines from database: %w", err)
 	}
 
 	return nil
@@ -465,6 +467,10 @@ func (h *Headscale) RenameMachine(machine *Machine, newName string) error {
 		return fmt.Errorf("failed to rename machine in the database: %w", err)
 	}
 
+	if err := h.LoadPrefetchMachinesFromDB(); err != nil {
+		return fmt.Errorf("failed to load machines from database: %w", err)
+	}
+
 	return nil
 }
 
@@ -482,6 +488,10 @@ func (h *Headscale) RefreshMachine(machine *Machine, expiry time.Time) error {
 			"failed to refresh machine (update expiration) in the database: %w",
 			err,
 		)
+	}
+
+	if err := h.LoadPrefetchMachinesFromDB(); err != nil {
+		return fmt.Errorf("failed to load machines from database: %w", err)
 	}
 
 	return nil
@@ -908,6 +918,10 @@ func (h *Headscale) RegisterMachine(machine Machine,
 			return nil, fmt.Errorf("failed register existing machine in the database: %w", err)
 		}
 
+		if err := h.LoadPrefetchMachinesFromDB(); err != nil {
+			return nil, fmt.Errorf("failed to load machines from database: %w", err)
+		}
+
 		log.Trace().
 			Caller().
 			Str("machine", machine.Hostname).
@@ -937,6 +951,10 @@ func (h *Headscale) RegisterMachine(machine Machine,
 
 	if err := h.db.Save(&machine).Error; err != nil {
 		return nil, fmt.Errorf("failed register(save) machine in the database: %w", err)
+	}
+
+	if err := h.LoadPrefetchMachinesFromDB(); err != nil {
+		return nil, fmt.Errorf("failed to load machines from database: %w", err)
 	}
 
 	log.Trace().
@@ -1201,6 +1219,19 @@ func (h *Headscale) GenerateGivenName(machineKey string, suppliedName string) (s
 	}
 
 	return givenName, nil
+}
+
+func (h *Headscale) GetPrefetchedMachines() []Machine {
+	h.prefetchMachineMutex.Lock()
+	defer h.prefetchMachineMutex.Unlock()
+	return h.prefetchedMachines
+}
+
+func (h *Headscale) LoadPrefetchMachinesFromDB() (err error) {
+	h.prefetchMachineMutex.Lock()
+	defer h.prefetchMachineMutex.Unlock()
+	h.prefetchedMachines, err = h.ListMachines()
+	return err
 }
 
 func (machines Machines) FilterByIP(ip netip.Addr) Machines {

@@ -122,6 +122,10 @@ func (h *Headscale) RenameUser(oldName, newName string) error {
 		return result.Error
 	}
 
+	if err := h.LoadPrefetchMachinesFromDB(); err != nil {
+		return fmt.Errorf("failed to load machines from database: %w", err)
+	}
+
 	return nil
 }
 
@@ -182,6 +186,10 @@ func (h *Headscale) SetMachineUser(machine *Machine, username string) error {
 		return result.Error
 	}
 
+	if err := h.LoadPrefetchMachinesFromDB(); err != nil {
+		return fmt.Errorf("failed to load machines from database: %w", err)
+	}
+	
 	return nil
 }
 

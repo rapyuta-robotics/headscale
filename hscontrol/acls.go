@@ -115,10 +115,7 @@ func (h *Headscale) LoadACLPolicyFromBytes(acl []byte) error {
 }
 
 func (h *Headscale) UpdateACLRules() error {
-	machines, err := h.ListMachines()
-	if err != nil {
-		return err
-	}
+	machines := h.GetPrefetchedMachines()
 
 	if h.aclPolicy == nil {
 		return errEmptyPolicy
@@ -216,16 +213,14 @@ func (pol *ACLPolicy) generateFilterRules(
 }
 
 func (h *Headscale) generateSSHRules() ([]*tailcfg.SSHRule, error) {
+	var err error
 	rules := []*tailcfg.SSHRule{}
 
 	if h.aclPolicy == nil {
 		return nil, errEmptyPolicy
 	}
 
-	machines, err := h.ListMachines()
-	if err != nil {
-		return nil, err
-	}
+	machines := h.GetPrefetchedMachines()
 
 	acceptAction := tailcfg.SSHAction{
 		Message:                  "",

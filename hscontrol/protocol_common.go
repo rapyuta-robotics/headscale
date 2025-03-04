@@ -224,6 +224,16 @@ func (h *Headscale) handleRegisterCommon(
 
 				return
 			}
+			if err := h.LoadPrefetchMachinesFromDB(); err != nil {
+				log.Error().
+					Caller().
+					Str("func", "RegistrationHandler").
+					Str("machine", machine.Hostname).
+					Err(err).
+					Msg("Error loading machines from database")
+
+				return
+			}
 		}
 
 		// If the NodeKey stored in headscale is the same as the key presented in a registration
@@ -727,6 +737,16 @@ func (h *Headscale) handleMachineRefreshKeyCommon(
 			Caller().
 			Err(err).
 			Msg("Failed to update machine key in the database")
+		http.Error(writer, "Internal server error", http.StatusInternalServerError)
+
+		return
+	}
+
+	if err := h.LoadPrefetchMachinesFromDB(); err != nil {
+		log.Error().
+			Caller().
+			Err(err).
+			Msg("Failed to load machines from  database")
 		http.Error(writer, "Internal server error", http.StatusInternalServerError)
 
 		return
