@@ -99,7 +99,7 @@ type Headscale struct {
 	registrationCache *cache.Cache
 
 	ipAllocationMutex    sync.Mutex
-	prefetchMachineMutex sync.Mutex
+	prefetchMachineMutex sync.RWMutex
 
 	shutdownChan       chan struct{}
 	pollNetMapStreamWG sync.WaitGroup

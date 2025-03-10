@@ -508,15 +508,25 @@ func (h *Headscale) DeleteMachine(machine *Machine) error {
 		return err
 	}
 
+	if err := h.LoadPrefetchMachinesFromDB(); err != nil {
+		return fmt.Errorf("failed to load machines from database: %w", err)
+	}
+
 	return nil
 }
 
 func (h *Headscale) TouchMachine(machine *Machine) error {
-	return h.db.Updates(Machine{
+	err := h.db.Updates(Machine{
 		ID:                   machine.ID,
 		LastSeen:             machine.LastSeen,
 		LastSuccessfulUpdate: machine.LastSuccessfulUpdate,
 	}).Error
+
+	if err != nil {
+		return err
+	}
+	h.UpdateMachineInCache(*machine)
+	return nil
 }
 
 // HardDeleteMachine hard deletes a Machine from the database.
@@ -528,6 +538,10 @@ func (h *Headscale) HardDeleteMachine(machine *Machine) error {
 
 	if err := h.db.Unscoped().Delete(&machine).Error; err != nil {
 		return err
+	}
+
+	if err := h.LoadPrefetchMachinesFromDB(); err != nil {
+		return fmt.Errorf("failed to load machines from database: %w", err)
 	}
 
 	return nil
@@ -1222,9 +1236,11 @@ func (h *Headscale) GenerateGivenName(machineKey string, suppliedName string) (s
 }
 
 func (h *Headscale) GetPrefetchedMachines() []Machine {
-	h.prefetchMachineMutex.Lock()
-	defer h.prefetchMachineMutex.Unlock()
-	return h.prefetchedMachines
+	h.prefetchMachineMutex.RLock()
+	defer h.prefetchMachineMutex.RUnlock()
+	machinesCopy := make([]Machine, len(h.prefetchedMachines))
+	copy(machinesCopy, h.prefetchedMachines)
+	return machinesCopy
 }
 
 func (h *Headscale) LoadPrefetchMachinesFromDB() (err error) {
@@ -1232,6 +1248,16 @@ func (h *Headscale) LoadPrefetchMachinesFromDB() (err error) {
 	defer h.prefetchMachineMutex.Unlock()
 	h.prefetchedMachines, err = h.ListMachines()
 	return err
+}
+
+func (h *Headscale) UpdateMachineInCache(machine Machine) {
+	h.prefetchMachineMutex.Lock()
+	defer h.prefetchMachineMutex.Unlock()
+	for idx, cacheMachine := range h.prefetchedMachines {
+		if cacheMachine.ID == machine.ID {
+			h.prefetchedMachines[idx] = machine
+		}
+	}
 }
 
 func (machines Machines) FilterByIP(ip netip.Addr) Machines {

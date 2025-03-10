@@ -76,7 +76,6 @@ func (h *Headscale) handlePollCommon(
 		machine.Endpoints = mapRequest.Endpoints
 		machine.LastSeen = &now
 	}
-
 	if err := h.db.Updates(machine).Error; err != nil {
 		if err != nil {
 			log.Error().
@@ -91,6 +90,7 @@ func (h *Headscale) handlePollCommon(
 			return
 		}
 	}
+	h.UpdateMachineInCache(*machine)
 
 	mapResp, err := h.getMapResponseData(mapRequest, machine, isNoise)
 	if err != nil {

@@ -651,8 +651,6 @@ func (h *Headscale) handleMachineLogOutCommon(
 				Str("machine", machine.Hostname).
 				Msg("Cannot delete ephemeral machine from the database")
 		}
-
-		return
 	}
 
 	log.Info().

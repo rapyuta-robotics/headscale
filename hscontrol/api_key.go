@@ -61,6 +61,10 @@ func (h *Headscale) CreateAPIKey(
 		return "", nil, fmt.Errorf("failed to save API key to database: %w", err)
 	}
 
+	if err := h.LoadPrefetchMachinesFromDB(); err != nil {
+		return "", nil, fmt.Errorf("failed to load machines from database: %w", err)
+	}
+
 	return keyStr, &key, nil
 }
 

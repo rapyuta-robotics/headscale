@@ -107,6 +107,10 @@ func (h *Headscale) CreatePreAuthKey(
 		return nil, err
 	}
 
+	if err := h.LoadPrefetchMachinesFromDB(); err != nil {
+		return nil, fmt.Errorf("failed to load machines from  database: %w", err)
+	}
+
 	return &key, nil
 }
 
@@ -169,6 +173,10 @@ func (h *Headscale) UsePreAuthKey(k *PreAuthKey) error {
 	k.Used = true
 	if err := h.db.Save(k).Error; err != nil {
 		return fmt.Errorf("failed to update key used status in the database: %w", err)
+	}
+
+	if err := h.LoadPrefetchMachinesFromDB(); err != nil {
+		return fmt.Errorf("failed to create key in the database: %w", err)
 	}
 
 	return nil
