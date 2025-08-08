@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/netip"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -557,7 +558,7 @@ func excludeCorrectlyTaggedNodes(
 	for tag := range aclPolicy.TagOwners {
 		owners, _ := getTagOwners(aclPolicy, user, stripEmailDomain)
 		ns := append(owners, user)
-		if contains(ns, user) {
+		if slices.Contains(ns, user) {
 			tags = append(tags, tag)
 		}
 	}
@@ -567,7 +568,7 @@ func excludeCorrectlyTaggedNodes(
 
 		found := false
 		for _, t := range hi.RequestTags {
-			if contains(tags, t) {
+			if slices.Contains(tags, t) {
 				found = true
 
 				break
@@ -634,14 +635,18 @@ func expandPorts(portsStr string, needsWildcard bool) (*[]tailcfg.PortRange, err
 
 func filterMachinesByUser(machines []Machine, user string) []Machine {
 	out := []Machine{}
-	for _, machine := range machines {
-		if machine.User.Name == user {
-			out = append(out, machine)
+	for index := 0; index < len(machines); index++ {
+		//for _, machine := range machines {
+		//if machine.User.Name == user {
+		if machines[index].User.Name == user {
+			out = append(out, machines[index])
+			//out = append(out, machine)
 		}
 	}
-
 	return out
 }
+
+var invalidTagErr = errors.New("invalid tag")
 
 // getTagOwners will return a list of user. An owner can be either a user or a group
 // a group cannot be composed of groups.
@@ -653,11 +658,7 @@ func getTagOwners(
 	var owners []string
 	ows, ok := pol.TagOwners[tag]
 	if !ok {
-		return []string{}, fmt.Errorf(
-			"%w. %v isn't owned by a TagOwner. Please add one first. https://tailscale.com/kb/1018/acls/#tag-owners",
-			errInvalidTag,
-			tag,
-		)
+		return []string{}, invalidTagErr
 	}
 	for _, owner := range ows {
 		if isGroup(owner) {
@@ -741,7 +742,8 @@ func (pol *ACLPolicy) getIPsFromTag(
 
 	// check for forced tags
 	for _, machine := range machines {
-		if contains(machine.ForcedTags, alias) {
+		//if contains(machine.ForcedTags, alias) {
+		if slices.Contains(machine.ForcedTags, alias) {
 			machine.IPAddresses.AppendToIPSet(&build)
 		}
 	}
@@ -770,7 +772,8 @@ func (pol *ACLPolicy) getIPsFromTag(
 		machines := filterMachinesByUser(machines, user)
 		for _, machine := range machines {
 			hi := machine.GetHostInfo()
-			if contains(hi.RequestTags, alias) {
+			//if contains(hi.RequestTags, alias) {
+			if slices.Contains(hi.RequestTags, alias) {
 				machine.IPAddresses.AppendToIPSet(&build)
 			}
 		}

@@ -887,6 +887,16 @@ func (h *Headscale) RegisterMachineFromAuthCallback(
 			// Registration of expired machine with different user
 			if registrationMachine.ID != 0 &&
 				registrationMachine.UserID != user.ID {
+				log.Info().
+					Str("error registering nodeKey", nodeKey.ShortString()).
+					Str("request userName", userName).
+					Uint64("cache registration machine id:", registrationMachine.ID).
+					Uint("cache registration machine user id:", registrationMachine.UserID).
+					Uint("db user id: ", user.ID).
+					Int("registration cache item count ", h.registrationCache.ItemCount()).
+					Str("registration cache items ", fmt.Sprintf("%v", h.registrationCache.Items())).
+					Msg("Registration failure due to key already registered")
+
 				return nil, ErrDifferentRegisteredUser
 			}
 
