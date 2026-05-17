@@ -790,6 +790,9 @@ func (pol *ACLPolicy) getIPsForUser(
 	build := netipx.IPSetBuilder{}
 
 	filteredMachines := filterMachinesByUser(machines, user)
+	if len(filteredMachines) == 0 {
+		return nil, nil //nolint
+	}
 	filteredMachines = excludeCorrectlyTaggedNodes(pol, filteredMachines, user, stripEmailDomain)
 
 	// shortcurcuit if we have no machines to get ips from.
