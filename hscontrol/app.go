@@ -68,6 +68,11 @@ const (
 	registerCacheExpiration = time.Minute * 15
 	registerCacheCleanup    = time.Minute * 20
 
+	// grpcMaxMsgSize caps gRPC message size (recv on servers/clients).
+	// Default gRPC limit is 4 MiB; the DB-backed ACL policy and large
+	// node lists exceed it, so raise to 64 MiB.
+	grpcMaxMsgSize = 64 << 20
+
 	DisabledClientAuth = "disabled"
 	RelaxedClientAuth  = "relaxed"
 	EnforcedClientAuth = "enforced"
@@ -602,6 +607,7 @@ func (h *Headscale) Serve() error {
 		[]grpc.DialOption{
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithContextDialer(GrpcSocketDialer),
+			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(grpcMaxMsgSize)),
 		}...,
 	)
 	if err != nil {
@@ -616,7 +622,10 @@ func (h *Headscale) Serve() error {
 	}
 
 	// Start the local gRPC server without TLS and without authentication
-	grpcSocket := grpc.NewServer(zerolog.UnaryInterceptor())
+	grpcSocket := grpc.NewServer(
+		zerolog.UnaryInterceptor(),
+		grpc.MaxRecvMsgSize(grpcMaxMsgSize),
+	)
 
 	v1.RegisterHeadscaleServiceServer(grpcSocket, newHeadscaleV1APIServer(h))
 	reflection.Register(grpcSocket)
@@ -653,6 +662,7 @@ func (h *Headscale) Serve() error {
 		log.Info().Msgf("Enabling remote gRPC at %s", h.cfg.GRPCAddr)
 
 		grpcOptions := []grpc.ServerOption{
+			grpc.MaxRecvMsgSize(grpcMaxMsgSize),
 			grpc.UnaryInterceptor(
 				grpcMiddleware.ChainUnaryServer(
 					h.grpcAuthenticationInterceptor,

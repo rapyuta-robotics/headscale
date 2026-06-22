@@ -70,6 +70,7 @@ func getHeadscaleCLIClient() (context.Context, v1.HeadscaleServiceClient, *grpc.
 
 	grpcOptions := []grpc.DialOption{
 		grpc.WithBlock(),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(64 << 20)),
 	}
 
 	address := cfg.CLI.Address
