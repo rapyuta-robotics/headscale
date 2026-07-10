@@ -6,10 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/netip"
 	"time"
 
 	"github.com/glebarez/sqlite"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/rs/zerolog/log"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -20,9 +23,13 @@ import (
 const (
 	dbVersion = "1"
 
-	_pgsqlMaxOpenConnections    = 10
-	_pgsqlMaxIdleConnections    = 10
+	_pgsqlMaxOpenConnections    = 25
+	_pgsqlMaxIdleConnections    = 25
 	_pgsqlMaxConnectionLifetime = 1 * time.Hour
+	_pgsqlMaxConnIdleTime       = 5 * time.Minute
+	_pgsqlConnectTimeout        = 10 * time.Second
+	_pgsqlTCPUserTimeout        = 30 * time.Second
+	_pgsqlStatementTimeoutMs    = "60000"
 
 	errValueNotFound     = Error("not found")
 	ErrCannotParsePrefix = Error("cannot parse prefix")
@@ -260,15 +267,44 @@ func (h *Headscale) openDB() (*gorm.DB, error) {
 		sqlDB.SetConnMaxIdleTime(time.Hour)
 
 	case Postgres:
-		db, err := gorm.Open(postgres.Open(h.dbString), &gorm.Config{
+		pgxConfig, err := pgx.ParseConfig(h.dbString)
+		if err != nil {
+			return nil, err
+		}
+
+		// The pgx default dialer keepalive of 5m needs ~50min of kernel
+		// probing to fail a silently dropped connection (Azure SNAT flow
+		// eviction black-holes established conns without RST), which wedges
+		// the entire pool. Aggressive keepalive fails a dead socket in ~35s.
+		dialer := &net.Dialer{
+			Timeout: _pgsqlConnectTimeout,
+			KeepAliveConfig: net.KeepAliveConfig{
+				Enable:   true,
+				Idle:     15 * time.Second,
+				Interval: 5 * time.Second,
+				Count:    4,
+			},
+			Control: pgsqlDialControl,
+		}
+		pgxConfig.DialFunc = dialer.DialContext
+
+		if pgxConfig.RuntimeParams == nil {
+			pgxConfig.RuntimeParams = map[string]string{}
+		}
+		pgxConfig.RuntimeParams["statement_timeout"] = _pgsqlStatementTimeoutMs
+		pgxConfig.RuntimeParams["idle_in_transaction_session_timeout"] = _pgsqlStatementTimeoutMs
+
+		sqlDB := stdlib.OpenDB(*pgxConfig)
+
+		db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{
 			DisableForeignKeyConstraintWhenMigrating: true,
 			Logger:                                   log,
 		})
 
-		sqlDB, _ := db.DB()
 		sqlDB.SetMaxOpenConns(_pgsqlMaxOpenConnections)
 		sqlDB.SetMaxIdleConns(_pgsqlMaxIdleConnections)
 		sqlDB.SetConnMaxLifetime(_pgsqlMaxConnectionLifetime)
+		sqlDB.SetConnMaxIdleTime(_pgsqlMaxConnIdleTime)
 
 		return db, err
 	}
