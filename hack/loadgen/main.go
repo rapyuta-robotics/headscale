@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -56,8 +57,16 @@ func main() {
 		ramp           = flag.Duration("ramp", 30*time.Second, "spread initial connections over this duration")
 		statsEvery     = flag.Duration("stats", 5*time.Second, "print stats this often")
 		duration       = flag.Duration("duration", 0, "stop after this long (0 = until interrupted)")
+		verify         = flag.Bool("verify", false, "fetch one non-streaming map response per machine (up to -n) and report packet filter and peer counts, then exit")
 	)
 	flag.Parse()
+
+	if *verify {
+		if err := verifyMaps(*serverURL, *dbDSN, *n); err != nil {
+			log.Fatalf("verify: %v", err)
+		}
+		return
+	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -333,6 +342,74 @@ func (c *client) runEndpointUpdates(ctx context.Context, interval time.Duration,
 			st.epBad.Add(1)
 		}
 	}
+}
+
+// verifyMaps sends one plain (uncompressed, non-streaming) MapRequest per
+// machine and reports what the server answered: the size of the packet
+// filter and the peer list. A filter of zero rules on a server with a policy
+// means the ACL rules were never built.
+func verifyMaps(serverURL, dbDSN string, n int) error {
+	ctx := context.Background()
+	machines, err := loadMachines(ctx, dbDSN, n)
+	if err != nil {
+		return err
+	}
+	serverKey, err := fetchServerKey(ctx, serverURL)
+	if err != nil {
+		return err
+	}
+	for i, m := range machines {
+		c := newClient(i, m, serverURL, serverKey)
+		mr := c.mapRequest(false, false)
+		mr.Compress = ""
+		mr.ReadOnly = true
+		rctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+		resp, err := c.do(rctx, mr)
+		if err != nil {
+			cancel()
+			c.nc.Close()
+			return fmt.Errorf("%s: %w", m.Hostname, err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		cancel()
+		c.nc.Close()
+		if err != nil {
+			return fmt.Errorf("%s: reading body: %w", m.Hostname, err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("%s: %s: %s", m.Hostname, resp.Status, bytes.TrimSpace(body))
+		}
+		// headscale prefixes each map response with its little-endian length.
+		if len(body) >= 4 && int(binary.LittleEndian.Uint32(body[:4])) == len(body)-4 {
+			body = body[4:]
+		}
+		var mapResp tailcfg.MapResponse
+		if err := json.Unmarshal(body, &mapResp); err != nil {
+			return fmt.Errorf("%s: decoding map response (%d bytes): %w", m.Hostname, len(body), err)
+		}
+		srcs := 0
+		for _, rule := range mapResp.PacketFilter {
+			srcs += len(rule.SrcIPs)
+		}
+		log.Printf("%-40s user=%-45s filter rules=%d (src entries %d) peers=%d", m.Hostname,
+			nodeUser(mapResp), len(mapResp.PacketFilter), srcs, len(mapResp.Peers))
+	}
+	return nil
+}
+
+func nodeUser(mr tailcfg.MapResponse) string {
+	if mr.Node == nil {
+		return "?"
+	}
+	if u, ok := mr.UserProfiles, true; ok && len(u) > 0 {
+		for _, p := range u {
+			if p.ID == mr.Node.User {
+				return p.LoginName
+			}
+		}
+	}
+	return fmt.Sprintf("uid:%d", mr.Node.User)
 }
 
 func sleepCtx(ctx context.Context, d time.Duration) bool {
