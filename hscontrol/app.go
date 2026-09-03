@@ -287,6 +287,15 @@ func (h *Headscale) expireEphemeralNodesWorker() {
 			}
 		}
 	}
+	// The deletes above bypass DeleteMachine, so refresh the machine cache
+	// (and with it the ACL rules) once for the whole sweep.
+	if len(usersChanged) > 0 {
+		if err := h.LoadPrefetchMachinesFromDB(); err != nil {
+			log.Error().
+				Err(err).
+				Msg("Failed to reload machines after removing ephemeral machines")
+		}
+	}
 	for _, user := range usersChanged {
 		h.setLastStateChangeToNow(user)
 	}
