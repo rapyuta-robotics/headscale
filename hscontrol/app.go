@@ -105,6 +105,9 @@ type Headscale struct {
 
 	ipAllocationMutex    sync.Mutex
 	prefetchMachineMutex sync.RWMutex
+	// aclUpdateMutex serialises ACL filter rebuilds. A rebuild walks every
+	// machine for every rule, so concurrent rebuilds only multiply the cost.
+	aclUpdateMutex sync.Mutex
 
 	shutdownChan       chan struct{}
 	pollNetMapStreamWG sync.WaitGroup
@@ -282,6 +285,15 @@ func (h *Headscale) expireEphemeralNodesWorker() {
 						Msg("🤮 Cannot delete ephemeral machine from the database")
 				}
 			}
+		}
+	}
+	// The deletes above bypass DeleteMachine, so refresh the machine cache
+	// (and with it the ACL rules) once for the whole sweep.
+	if len(usersChanged) > 0 {
+		if err := h.LoadPrefetchMachinesFromDB(); err != nil {
+			log.Error().
+				Err(err).
+				Msg("Failed to reload machines after removing ephemeral machines")
 		}
 	}
 	for _, user := range usersChanged {
