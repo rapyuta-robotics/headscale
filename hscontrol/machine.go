@@ -409,15 +409,13 @@ func (h *Headscale) SetTags(machine *Machine, tags []string) error {
 		}
 	}
 	machine.ForcedTags = newTags
-	if err := h.UpdateACLRules(); err != nil && !errors.Is(err, errEmptyPolicy) {
-		return err
-	}
 	h.setLastStateChangeToNow(machine.User)
 
 	if err := h.db.Save(machine).Error; err != nil {
 		return fmt.Errorf("failed to update tags for machine in the database: %w", err)
 	}
 
+	// Reloading the cache rebuilds the ACL rules with the new forced tags.
 	if err := h.LoadPrefetchMachinesFromDB(); err != nil {
 		return fmt.Errorf("failed to load machines from database: %w", err)
 	}
@@ -1252,11 +1250,27 @@ func (h *Headscale) GetPrefetchedMachines() []Machine {
 	return machinesCopy
 }
 
-func (h *Headscale) LoadPrefetchMachinesFromDB() (err error) {
+// LoadPrefetchMachinesFromDB replaces the machine cache with the database
+// contents. Every machine lifecycle change (register, expire, delete, tag and
+// user changes) ends up here, which makes it the one place the ACL filter has
+// to be rebuilt: the filter is derived from exactly this list.
+func (h *Headscale) LoadPrefetchMachinesFromDB() error {
 	h.prefetchMachineMutex.Lock()
-	defer h.prefetchMachineMutex.Unlock()
-	h.prefetchedMachines, err = h.ListMachines()
-	return err
+	machines, err := h.ListMachines()
+	if err == nil {
+		h.prefetchedMachines = machines
+	}
+	h.prefetchMachineMutex.Unlock()
+	if err != nil {
+		return err
+	}
+
+	// At startup the cache is loaded before the policy; nothing to rebuild yet.
+	if err := h.UpdateACLRules(); err != nil && !errors.Is(err, errEmptyPolicy) {
+		return fmt.Errorf("failed to rebuild ACL rules after reloading machines: %w", err)
+	}
+
+	return nil
 }
 
 func (h *Headscale) UpdateMachineInCache(machine Machine) {

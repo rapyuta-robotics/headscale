@@ -27,6 +27,11 @@ func (h *Headscale) handlePollCommon(
 	mapRequest tailcfg.MapRequest,
 	isNoise bool,
 ) {
+	// The tags a machine requests are the only part of a MapRequest the ACL
+	// filter depends on. Remember what we had before overwriting Hostinfo so
+	// we can tell whether they changed.
+	previousRequestTags := machine.HostInfo.RequestTags
+
 	machine.Hostname = mapRequest.Hostinfo.Hostname
 	machine.HostInfo = HostInfo(*mapRequest.Hostinfo)
 	machine.DiscoKey = DiscoPublicKeyStripPrefix(mapRequest.DiscoKey)
@@ -41,15 +46,23 @@ func (h *Headscale) handlePollCommon(
 			Msg("Error processing machine routes")
 	}
 
-	// update ACLRules with peer informations (to update server tags if necessary)
 	if h.aclPolicy != nil {
-		err := h.UpdateACLRules()
-		if err != nil {
-			log.Error().
-				Caller().
-				Bool("noise", isNoise).
-				Str("machine", machine.Hostname).
-				Err(err)
+		// Rebuild the filter only when this machine's requested tags changed.
+		// Machine membership and forced-tag changes rebuild it when the
+		// machine cache is reloaded; endpoint and other Hostinfo churn, which
+		// is the bulk of poll traffic, must not trigger a rebuild.
+		if requestTagsChanged(previousRequestTags, machine.HostInfo.RequestTags) {
+			// The rebuild reads the cache, so it has to see the new tags.
+			h.UpdateMachineInCache(*machine)
+
+			if err := h.UpdateACLRules(); err != nil {
+				log.Error().
+					Caller().
+					Bool("noise", isNoise).
+					Str("machine", machine.Hostname).
+					Err(err).
+					Msg("Failed to update ACL rules after requested tags changed")
+			}
 		}
 
 		// update routes with peer information

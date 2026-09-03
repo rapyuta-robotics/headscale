@@ -115,7 +115,38 @@ func (h *Headscale) LoadACLPolicyFromBytes(acl []byte) error {
 	return h.UpdateACLRules()
 }
 
+// requestTagsChanged reports whether the set of tags a machine requests via
+// its Hostinfo differs between two polls. Order and duplicates are ignored:
+// only membership affects the ACL filter.
+func requestTagsChanged(oldTags, newTags []string) bool {
+	oldSet := make(map[string]struct{}, len(oldTags))
+	for _, tag := range oldTags {
+		oldSet[tag] = struct{}{}
+	}
+	newSet := make(map[string]struct{}, len(newTags))
+	for _, tag := range newTags {
+		newSet[tag] = struct{}{}
+	}
+	if len(oldSet) != len(newSet) {
+		return true
+	}
+	for tag := range newSet {
+		if _, ok := oldSet[tag]; !ok {
+			return true
+		}
+	}
+
+	return false
+}
+
+// UpdateACLRules rebuilds the packet filter from the current policy and the
+// cached machine list. It is expensive (every rule is expanded against every
+// machine), so callers must only invoke it when one of its inputs changed:
+// the policy, the machine set, forced tags, or a machine's requested tags.
 func (h *Headscale) UpdateACLRules() error {
+	h.aclUpdateMutex.Lock()
+	defer h.aclUpdateMutex.Unlock()
+
 	machines := h.GetPrefetchedMachines()
 
 	if h.aclPolicy == nil {

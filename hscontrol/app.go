@@ -105,6 +105,9 @@ type Headscale struct {
 
 	ipAllocationMutex    sync.Mutex
 	prefetchMachineMutex sync.RWMutex
+	// aclUpdateMutex serialises ACL filter rebuilds. A rebuild walks every
+	// machine for every rule, so concurrent rebuilds only multiply the cost.
+	aclUpdateMutex sync.Mutex
 
 	shutdownChan       chan struct{}
 	pollNetMapStreamWG sync.WaitGroup
