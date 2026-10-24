@@ -207,8 +207,12 @@ type client struct {
 }
 
 func newClient(id int, m machineRow, serverURL string, serverKey key.MachinePublic) *client {
-	nc, err := controlclient.NewNoiseClient(key.NewMachine(), serverKey, serverURL,
-		&tsdial.Dialer{Logf: logger.Discard}, nil)
+	nc, err := controlclient.NewNoiseClient(controlclient.NoiseOpts{
+		PrivKey:      key.NewMachine(),
+		ServerPubKey: serverKey,
+		ServerURL:    serverURL,
+		Dialer:       &tsdial.Dialer{Logf: logger.Discard},
+	})
 	if err != nil {
 		log.Fatalf("creating noise client for %s: %v", m.Hostname, err)
 	}
