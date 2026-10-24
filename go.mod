@@ -2,6 +2,8 @@ module github.com/juanfont/headscale
 
 go 1.24
 
+toolchain go1.27.3
+
 require (
 	github.com/AlecAivazis/survey/v2 v2.3.6
 	github.com/cenkalti/backoff/v4 v4.2.0
