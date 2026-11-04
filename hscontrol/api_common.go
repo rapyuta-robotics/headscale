@@ -88,7 +88,7 @@ func (h *Headscale) generateMapResponse(
 		CollectServices: "false",
 
 		// TODO: Only send if updated
-		PacketFilter: h.aclRules,
+		PacketFilter: reduceFilterRules(machine, nodePeers, h.compiledACLFilter()),
 
 		UserProfiles: profiles,
 

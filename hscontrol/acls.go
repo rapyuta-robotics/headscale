@@ -160,6 +160,8 @@ func (h *Headscale) UpdateACLRules() error {
 
 	log.Trace().Interface("ACL", rules).Msg("ACL rules generated")
 	h.aclRules = rules
+	compiled := compileFilterRules(rules)
+	h.aclFilter.Store(&compiled)
 
 	if featureEnableSSH() {
 		sshRules, err := h.generateSSHRules()
