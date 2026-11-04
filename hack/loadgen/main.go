@@ -33,7 +33,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -58,11 +60,12 @@ func main() {
 		statsEvery     = flag.Duration("stats", 5*time.Second, "print stats this often")
 		duration       = flag.Duration("duration", 0, "stop after this long (0 = until interrupted)")
 		verify         = flag.Bool("verify", false, "fetch one non-streaming map response per machine (up to -n) and report packet filter and peer counts, then exit")
+		dumpDir        = flag.String("dump", "", "with -verify, also write each raw map response to <dir>/<hostname>.json")
 	)
 	flag.Parse()
 
 	if *verify {
-		if err := verifyMaps(*serverURL, *dbDSN, *n); err != nil {
+		if err := verifyMaps(*serverURL, *dbDSN, *n, *dumpDir); err != nil {
 			log.Fatalf("verify: %v", err)
 		}
 		return
@@ -350,9 +353,10 @@ func (c *client) runEndpointUpdates(ctx context.Context, interval time.Duration,
 
 // verifyMaps sends one plain (uncompressed, non-streaming) MapRequest per
 // machine and reports what the server answered: the size of the packet
-// filter and the peer list. A filter of zero rules on a server with a policy
+// filter and the peer list. With dumpDir set it also writes each response
+// there for offline comparison. A filter of zero rules on a server with a policy
 // means the ACL rules were never built.
-func verifyMaps(serverURL, dbDSN string, n int) error {
+func verifyMaps(serverURL, dbDSN string, n int, dumpDir string) error {
 	ctx := context.Background()
 	machines, err := loadMachines(ctx, dbDSN, n)
 	if err != nil {
@@ -387,6 +391,13 @@ func verifyMaps(serverURL, dbDSN string, n int) error {
 		// headscale prefixes each map response with its little-endian length.
 		if len(body) >= 4 && int(binary.LittleEndian.Uint32(body[:4])) == len(body)-4 {
 			body = body[4:]
+		}
+		if dumpDir != "" {
+			// Hostnames repeat across users, node keys do not.
+			name := strings.TrimPrefix(m.NodeKey.String(), "nodekey:") + ".json"
+			if err := os.WriteFile(filepath.Join(dumpDir, name), body, 0o600); err != nil {
+				return fmt.Errorf("%s: %w", m.Hostname, err)
+			}
 		}
 		var mapResp tailcfg.MapResponse
 		if err := json.Unmarshal(body, &mapResp); err != nil {

@@ -169,10 +169,9 @@ func (machine *Machine) isEphemeral() bool {
 	return machine.AuthKey != nil && machine.AuthKey.Ephemeral
 }
 
-func (machine *Machine) canAccess(filter []tailcfg.FilterRule, machine2 *Machine) bool {
-	for _, rule := range filter {
-		// TODO(kradalby): Cache or pregen this
-		matcher := MatchFromFilterRule(rule)
+func (machine *Machine) canAccess(filter []filterRule, machine2 *Machine) bool {
+	for i := range filter {
+		matcher := &filter[i].match
 
 		if !matcher.SrcsContainsIPs([]netip.Addr(machine.IPAddresses)) {
 			continue
@@ -186,10 +185,20 @@ func (machine *Machine) canAccess(filter []tailcfg.FilterRule, machine2 *Machine
 	return false
 }
 
+// compiledACLFilter returns the compiled ACL filter, compiling aclRules
+// directly if UpdateACLRules has not run (no policy, or in tests).
+func (h *Headscale) compiledACLFilter() []filterRule {
+	if filter := h.aclFilter.Load(); filter != nil {
+		return *filter
+	}
+
+	return compileFilterRules(h.aclRules)
+}
+
 // filterMachinesByACL wrapper function to not have devs pass around locks and maps
 // related to the application outside of tests.
 func (h *Headscale) filterMachinesByACL(currentMachine *Machine, peers Machines) Machines {
-	return filterMachinesByACL(currentMachine, peers, h.aclRules)
+	return filterMachinesByCompiledACL(currentMachine, peers, h.compiledACLFilter())
 }
 
 // filterMachinesByACL returns the list of peers authorized to be accessed from a given machine.
@@ -197,6 +206,14 @@ func filterMachinesByACL(
 	machine *Machine,
 	machines Machines,
 	filter []tailcfg.FilterRule,
+) Machines {
+	return filterMachinesByCompiledACL(machine, machines, compileFilterRules(filter))
+}
+
+func filterMachinesByCompiledACL(
+	machine *Machine,
+	machines Machines,
+	filter []filterRule,
 ) Machines {
 	result := Machines{}
 

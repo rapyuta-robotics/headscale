@@ -140,3 +140,129 @@ func (m *Match) DestsContainsIP(ips []netip.Addr) bool {
 
 	return false
 }
+
+// filterRule is a FilterRule with its addresses parsed. The ACL filter is
+// compiled once per rebuild so that map responses, which check every rule for
+// every peer of every machine, do not parse the policy again each time.
+type filterRule struct {
+	tailcfg.FilterRule
+	match Match
+	// srcs and dsts hold the parsed SrcIPs and DstPorts[].IP, in order.
+	srcs []*netipx.IPSet
+	dsts []*netipx.IPSet
+}
+
+func compileFilterRules(rules []tailcfg.FilterRule) []filterRule {
+	compiled := make([]filterRule, len(rules))
+	for i, rule := range rules {
+		srcs := make([]*netipx.IPSet, len(rule.SrcIPs))
+		for j, src := range rule.SrcIPs {
+			srcs[j] = parseIPSetOrEmpty(src)
+		}
+		dsts := make([]*netipx.IPSet, len(rule.DstPorts))
+		for j, dest := range rule.DstPorts {
+			dsts[j] = parseIPSetOrEmpty(dest.IP)
+		}
+		compiled[i] = filterRule{
+			FilterRule: rule,
+			match:      MatchFromFilterRule(rule),
+			srcs:       srcs,
+			dsts:       dsts,
+		}
+	}
+
+	return compiled
+}
+
+// parseIPSetOrEmpty fails closed: an address we cannot parse matches nothing.
+func parseIPSetOrEmpty(arg string) *netipx.IPSet {
+	set, err := parseIPSet(arg, nil)
+	if err != nil {
+		return &netipx.IPSet{}
+	}
+
+	return set
+}
+
+// denyAllFilter is sent to a machine that no rule applies to. An empty
+// PacketFilter is dropped by omitempty, which tells the client to keep the
+// filter it already has; a rule without sources matches nothing.
+var denyAllFilter = []tailcfg.FilterRule{{SrcIPs: []string{}}}
+
+// reduceFilterRules returns the part of the ACL filter that machine can ever
+// apply. Tailscale clients only check the filter for packets arriving at them,
+// and WireGuard only accepts a packet from a peer whose AllowedIPs contain its
+// source. So a rule matters only if a destination is the machine or a subnet
+// it advertises, and only the sources inside the machine's own addresses or
+// its peers' AllowedIPs can ever match. Everything else is dropped, so the
+// filter reveals nothing beyond the peer list; sending the whole filter
+// disclosed every other user's addresses and subnets to each client.
+//
+// The destination check follows ReduceFilterRules in upstream headscale v0.23.
+// The source check is needed here because peers are limited to the machine's
+// own user while the policy has rules across users.
+func reduceFilterRules(machine *Machine, peers []*tailcfg.Node, rules []filterRule) []tailcfg.FilterRule {
+	addrs := []netip.Addr(machine.IPAddresses)
+	routes := machine.HostInfo.RoutableIPs
+
+	var sourcesBuilder netipx.IPSetBuilder
+	for _, addr := range addrs {
+		sourcesBuilder.Add(addr)
+	}
+	for _, peer := range peers {
+		for _, prefix := range peer.Addresses {
+			sourcesBuilder.AddPrefix(prefix)
+		}
+		for _, prefix := range peer.AllowedIPs {
+			sourcesBuilder.AddPrefix(prefix)
+		}
+	}
+	sources, _ := sourcesBuilder.IPSet()
+
+	reduced := []tailcfg.FilterRule{}
+	for _, rule := range rules {
+		if !rule.match.Srcs.Overlaps(sources) || !setMatchesMachine(rule.match.Dests, addrs, routes) {
+			continue
+		}
+
+		kept := rule.FilterRule
+		// SrcBits pairs with SrcIPs by index; headscale never sets it, but
+		// leave such a rule's sources alone rather than misalign them.
+		if len(rule.SrcBits) == 0 {
+			kept.SrcIPs = []string{}
+			for i, src := range rule.srcs {
+				if src.Overlaps(sources) {
+					kept.SrcIPs = append(kept.SrcIPs, rule.SrcIPs[i])
+				}
+			}
+		}
+		kept.DstPorts = []tailcfg.NetPortRange{}
+		for i, dst := range rule.dsts {
+			if setMatchesMachine(dst, addrs, routes) {
+				kept.DstPorts = append(kept.DstPorts, rule.DstPorts[i])
+			}
+		}
+		reduced = append(reduced, kept)
+	}
+
+	if len(reduced) == 0 {
+		return denyAllFilter
+	}
+
+	return reduced
+}
+
+func setMatchesMachine(set *netipx.IPSet, addrs []netip.Addr, routes []netip.Prefix) bool {
+	for _, addr := range addrs {
+		if set.Contains(addr) {
+			return true
+		}
+	}
+	for _, route := range routes {
+		if set.OverlapsPrefix(route) {
+			return true
+		}
+	}
+
+	return false
+}

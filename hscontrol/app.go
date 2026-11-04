@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -95,6 +96,10 @@ type Headscale struct {
 	aclRules           []tailcfg.FilterRule
 	sshPolicy          *tailcfg.SSHPolicy
 	prefetchedMachines []Machine
+
+	// aclFilter is aclRules compiled, published as a whole because poll
+	// handlers read it while UpdateACLRules replaces it.
+	aclFilter atomic.Pointer[[]filterRule]
 
 	lastStateChange *xsync.MapOf[string, time.Time]
 
