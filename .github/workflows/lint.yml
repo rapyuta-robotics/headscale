@@ -67,6 +67,8 @@ jobs:
         with:
           prettier_options: >-
             --check **/*.{ts,js,md,yaml,yml,sass,css,scss,html}
+          # Matches the prettier 2.x from flake.nix; prettier 3 reformats upstream files.
+          prettier_version: 2.8.8
           only_changed: false
           dry: true
 
