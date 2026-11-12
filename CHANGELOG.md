@@ -1,6 +1,5 @@
 # CHANGELOG
 
-
 ## 0.23.0 (2023-XX-XX)
 
 ### BREAKING
@@ -8,15 +7,21 @@
 - Code reorganisation, a lot of code has moved, please review the following PRs accordingly [#1444](https://github.com/juanfont/headscale/pull/1444)
 
 ## 0.22.5-rr (2024-05-02)
+
 ### Fixed
+
 - High CPU consumption during multiple machines/nodes connect/disconnect in tailnet
 
 ## 0.22.4-rr (2024-01-11)
+
 ### Fixed
-- Subnet failover handler checks for user ID when finding new primary route 
+
+- Subnet failover handler checks for user ID when finding new primary route
 
 ## 0.22.3-rr (2023-XX-28)
+
 ### Changes
+
 - Set max open and idle connections for postgres
 - Allows conflicting subnet ranges across users
 
