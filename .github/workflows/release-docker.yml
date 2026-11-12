@@ -9,6 +9,9 @@ on:
 
 jobs:
   docker-release:
+    permissions:
+      contents: read
+      packages: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -72,6 +75,9 @@ jobs:
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
   docker-debug-release:
+    permissions:
+      contents: read
+      packages: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
